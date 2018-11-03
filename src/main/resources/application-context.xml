@@ -1,0 +1,115 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<beans xmlns="http://www.springframework.org/schema/beans"
+       xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+       xmlns:context="http://www.springframework.org/schema/context"
+       xmlns:tx="http://www.springframework.org/schema/tx"
+       xsi:schemaLocation="
+       http://www.springframework.org/schema/tx
+        http://www.springframework.org/schema/tx/spring-tx.xsd
+		http://www.springframework.org/schema/beans
+		http://www.springframework.org/schema/beans/spring-beans-4.0.xsd
+		http://www.springframework.org/schema/context
+		http://www.springframework.org/schema/context/spring-context-4.0.xsd">
+
+    <context:component-scan base-package="com.hj.u.*" />
+
+    <bean id="env" class="org.springframework.beans.factory.config.PropertiesFactoryBean">
+        <property name="locations">
+            <list>
+                <value>mysql.properties</value>
+                <value>redis.properties</value>
+            </list>
+        </property>
+    </bean>
+    <bean id="dataSource" class="com.zaxxer.hikari.HikariDataSource" destroy-method="close">
+        <property name="driverClassName" value="#{env['jdbc.driver']}" />
+        <property name="jdbcUrl" value="#{env['jdbc.url']}" />
+        <property name="username" value="#{env['jdbc.username']}" />
+        <property name="password" value="#{env['jdbc.password']}" />
+        <property name="maximumPoolSize" value="10" />
+        <property name="minimumIdle" value="10" />
+        <property name="connectionTestQuery" value="select 1" />
+        <property name="dataSourceProperties">
+            <props>
+                <prop key="cachePrepStmts">true</prop>
+                <prop key="prepStmtCacheSize">250</prop>
+                <prop key="prepStmtCacheSqlLimit">2048</prop>
+                <prop key="useServerPrepStmts">true</prop>
+            </props>
+        </property>
+    </bean>
+    <!--<bean id="dataSource" class="com.alibaba.druid.pool.DruidDataSource">
+        <property name="driverClassName" value="#{env['jdbc.driver']}" />
+        <property name="url" value="#{env['jdbc.url']}" />
+        <property name="username" value="#{env['jdbc.username']}" />
+        <property name="password" value="#{env['jdbc.password']}" />
+
+        <property name="initialSize" value="#{env['dbcp.initialSize']}" />
+        <property name="maxActive" value="#{env['dbcp.maxActive']}" />
+        <property name="maxWait" value="#{env['dbcp.maxWait']}" />
+        <property name="testOnBorrow"
+                  value="#{env['jdbc.testSql'] == null ? false : true}" />
+        <property name="validationQuery" value="#{env['jdbc.testSql']}" />
+        <property name="defaultAutoCommit" value="true" />
+        <property name="removeAbandoned" value="true" />
+        <property name="removeAbandonedTimeout" value="60" />
+        <property name="logAbandoned" value="true" />
+    </bean>-->
+    <bean id="transactionManager" class="org.springframework.jdbc.datasource.DataSourceTransactionManager">
+        <property name="dataSource" ref="dataSource"/>
+    </bean>
+    <bean id="jdbcTemplate" class="org.springframework.jdbc.core.JdbcTemplate">
+        <property name="dataSource" ref="dataSource"/>
+    </bean>
+    <tx:annotation-driven transaction-manager="transactionManager" />
+    <!--设置jedisPool链接池的配置-->
+    <bean id="jedisPoolConfigXml" class="redis.clients.jedis.JedisPoolConfig">
+        <property name="maxTotal" value="#{env['redis.xml.maxTotal']}"/>
+        <property name="maxIdle" value="#{env['redis.xml.maxIdle']}"/>
+        <property name="maxWaitMillis" value="#{env['redis.xml.maxWaitMillis']}"/>
+        <property name="testOnBorrow" value="#{env['redis.xml.testOnBorrow']}"/>
+        <property name="testOnReturn" value="#{env['redis.xml.testOnReturn']}"/>
+    </bean>
+
+    <!--redis链接密码-->
+    <bean id="redisPasswordXml" class="org.springframework.data.redis.connection.RedisPassword">
+        <constructor-arg name="thePassword" value="#{env['redis.xml.passwd']}"/>
+    </bean>
+
+    <!--spring-data-redis2.0以上的配置-->
+    <bean id="redisStandaloneConfigurationXml" class="org.springframework.data.redis.connection.RedisStandaloneConfiguration">
+        <property name="hostName" value="#{env['redis.xml.hostName']}"/>
+        <property name="port" value="#{env['redis.xml.port']}"/>
+        <property name="password" ref="redisPasswordXml" />
+        <property name="database" value="#{env['redis.xml.dbIndex']}"/>
+
+    </bean>
+    <!--配置jedis链接工厂 spring-data-redis2.0中
+        建议改为构造器传入一个RedisStandaloneConfiguration  单机
+                            RedisSentinelConfiguration  主从复制
+                            RedisClusterConfiguration  集群-->
+    <bean id="jedisConnectionFactoryXml" class="org.springframework.data.redis.connection.jedis.JedisConnectionFactory">
+        <!--注销掉的部分为spring-data-redis2.0以下的版本配置的方式-->
+        <!--  <property name="hostName" value="${redis.host}"/>
+          <property name="port" value="${redis.port}"/>
+          <property name="poolConfig" ref="jedisPoolConfig"/>
+          <property name="password" value="${redis.auth}" />
+          <property name="database" value="${redis.dbIndex}"/>-->
+        <!--spring-data-redis2.0以上建议获取的方式-->
+        <constructor-arg name="standaloneConfig" ref="redisStandaloneConfigurationXml"/>
+    </bean>
+
+    <!--手动设置 key  与 value的序列化方式-->
+    <bean id="keySerializer" class="org.springframework.data.redis.serializer.StringRedisSerializer"/>
+    <bean id="valueSerializer" class="org.springframework.data.redis.serializer.GenericJackson2JsonRedisSerializer"/>
+
+    <!--配置jedis模板  -->
+    <bean id = "redisTemplateXml" class="org.springframework.data.redis.core.RedisTemplate">
+        <property name="connectionFactory" ref="jedisConnectionFactoryXml" />
+        <property name="keySerializer" ref="keySerializer" />
+        <property name="valueSerializer" ref="valueSerializer" />
+        <property name="hashKeySerializer" ref="keySerializer" />
+        <property name="hashValueSerializer" ref="valueSerializer" />
+    </bean>
+
+</beans>
